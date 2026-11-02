@@ -1,0 +1,4 @@
+node_modules/
+.env
+data/leaderboard.json
+npm-debug.log*

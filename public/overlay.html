@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ChatClash Arena</title>
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111126;color:#fff;font-family:Inter,ui-rounded,system-ui,-apple-system,Segoe UI,sans-serif}
+    body{background:radial-gradient(ellipse at 50% 40%,#29204f 0,#15152e 52%,#0e1022 100%)}canvas{display:block;width:100vw;height:100vh}
+    .top{position:absolute;top:22px;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;text-shadow:0 3px 16px #0008}.brand{font-size:13px;letter-spacing:.28em;color:#e4baff;font-weight:900}.status{font-size:27px;font-weight:1000;margin-top:2px}.sub{font-size:14px;color:#d4cbe8}.side{position:absolute;top:22px;left:22px;width:220px;pointer-events:none}.panel{background:#17162bcc;border:1px solid #ffffff22;border-radius:16px;padding:13px 15px;box-shadow:0 8px 28px #0003}.panel h3{margin:0 0 8px;font-size:12px;letter-spacing:.15em;color:#d8aaff}.feed{display:flex;flex-direction:column;gap:6px;font-size:13px}.feed div{animation:pop .2s ease-out}.feed .ko{color:#ff9aab}.feed .winner{color:#ffe27b}.right{position:absolute;top:22px;right:22px;width:160px;pointer-events:none}.boardline{display:flex;justify-content:space-between;font-size:13px;margin:5px 0;color:#efeaff}.boardline b{color:#ffe27b}.help{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);white-space:nowrap;border-radius:20px;padding:8px 14px;background:#151429bb;border:1px solid #ffffff1c;color:#ddd6f5;font-size:13px;pointer-events:none}.help b{color:#ffcf69}.badge{font-size:10px;color:#a9a2c0}#winner{position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);text-align:center;font-size:clamp(28px,5vw,64px);font-weight:1000;color:#ffe27b;text-shadow:0 0 25px #ffb531,0 5px 20px #000;pointer-events:none;animation:celebrate .7s infinite alternate}#winner small{display:block;font-size:18px;color:#fff}@keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@keyframes celebrate{to{transform:translate(-50%,-50%) scale(1.07)}}
+  </style>
+</head>
+<body>
+  <canvas id="arena"></canvas>
+  <div class="top"><div class="brand">CHATCLASH ARENA</div><div id="status" class="status">CONNECTING…</div><div id="sub" class="sub">Connect to Twitch chat and type !join</div></div>
+  <div class="side"><div class="panel"><h3>LIVE FEED</h3><div id="feed" class="feed"></div></div></div>
+  <div class="right"><div class="panel"><h3>CHAMPIONS</h3><div id="board"></div></div></div>
+  <div id="winner" class="winner" hidden></div>
+  <div class="help">💬 <b>!join</b> drop in · <b>!attack @name</b> bonk · <b>!heal</b> · <b>!chaos</b> vote</div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+  (() => {
+    const canvas=document.getElementById('arena'),ctx=canvas.getContext('2d');let state=null,feed=[],board=[],particles=[],last=performance.now();
+    const socket=io();socket.on('state',s=>{state=s;renderStatus()});socket.on('feed',f=>{feed.unshift(f);feed=feed.slice(0,6);renderFeed()});socket.on('leaderboard',b=>{board=b;renderBoard()});
+    function resize(){const d=Math.min(devicePixelRatio||1,2);canvas.width=innerWidth*d;canvas.height=innerHeight*d;ctx.setTransform(d,0,0,d,0,0)}addEventListener('resize',resize);resize();
+    function renderStatus(){if(!state)return;const s=document.getElementById('status'),sub=document.getElementById('sub'),win=document.getElementById('winner');
+      s.textContent=state.phase==='lobby'?`LOBBY · ${clock(state.secondsLeft)}`:state.phase==='battle'?`ROUND ${state.round} · ${clock(state.secondsLeft)}`:state.winner?'CHAMPION!':'ROUND OVER';
+      sub.textContent=state.phase==='lobby'?`${state.players.filter(p=>!p.bot&&p.alive).length} viewers joined · arena drops in ${state.secondsLeft}s`:state.phase==='battle'?`${state.players.filter(p=>p.alive).length} blobs remain · stay in the ring!`:'What a round! Next lobby loading…';
+      if(state.phase==='winner'&&state.winner){win.hidden=false;win.innerHTML=`👑 ${esc(state.winner)}<small>ARENA CHAMPION!</small>`}else win.hidden=true;
+    }
+    function clock(n){return `${Math.floor(n/60)}:${String(n%60).padStart(2,'0')}`}
+    function esc(s){const e=document.createElement('span');e.textContent=s;return e.innerHTML}
+    function renderFeed(){document.getElementById('feed').innerHTML=feed.map(f=>`<div class="${f.kind}">${esc(f.text)}</div>`).join('')}
+    function renderBoard(){document.getElementById('board').innerHTML=board.length?board.map((p,i)=>`<div class="boardline"><span>${i+1}. ${esc(p.name)}</span><b>${p.wins}🏆</b></div>`).join(''):'<span class="badge">No champions yet</span>'}
+    function burst(x,y,color,n=20){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,v=40+Math.random()*190;particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-50,life:1,color,size:3+Math.random()*5})}}
+    function drawBlob(p,t,scale){const x=p.x*scale,y=p.y*scale,r=p.radius*scale;const wobble=Math.sin(t/220+p.x)*.08;ctx.save();ctx.translate(x,y);ctx.scale(1+wobble,1-wobble);ctx.shadowColor=p.color;ctx.shadowBlur=p.alive?16:0;ctx.fillStyle=p.alive?p.color:'#67647a';
+      ctx.beginPath();for(let i=0;i<24;i++){const a=i*Math.PI/12,rr=r*(1+.07*Math.sin(a*3+t/160+p.y));const px=Math.cos(a)*rr,py=Math.sin(a)*rr;if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py)}ctx.closePath();ctx.fill();ctx.shadowBlur=0;
+      if(p.hitUntil>Date.now()){ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.stroke()}
+      ctx.fillStyle='#202039';ctx.beginPath();ctx.ellipse(-r*.3,-r*.05,r*.09,r*.13,0,0,Math.PI*2);ctx.ellipse(r*.3,-r*.05,r*.09,r*.13,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(-r*.32,-r*.1,r*.035,r*.04,0,0,Math.PI*2);ctx.ellipse(r*.28,-r*.1,r*.035,r*.04,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#fff';ctx.font=`700 ${Math.max(11,13*scale)}px system-ui`;ctx.textAlign='center';ctx.shadowColor='#000';ctx.shadowBlur=5;ctx.fillText(p.name+(p.bot?' ✦':''),0,r+16*scale);ctx.shadowBlur=0;
+      const bw=r*2,by=-r-12*scale;ctx.fillStyle='#242238';ctx.beginPath();ctx.roundRect(-bw/2,by,bw,5*scale,3);ctx.fill();ctx.fillStyle=p.hp>55?'#65e9a4':p.hp>25?'#ffd166':'#ff6178';ctx.beginPath();ctx.roundRect(-bw/2,by,bw*Math.max(0,p.hp/p.maxHp),5*scale,3);ctx.fill();
+      if(p.bot){ctx.fillStyle='#fff8';ctx.font=`900 ${9*scale}px system-ui`;ctx.fillText('BOT',0,-r-18*scale)}ctx.restore();
+    }
+    // One display-synced loop; game decisions are only received in server snapshots.
+    function loop(t){requestAnimationFrame(loop);const dt=Math.min(.04,(t-last)/1000);last=t;const w=innerWidth,h=innerHeight;ctx.clearRect(0,0,w,h);if(!state)return;const scale=Math.min((w-60)/state.width,(h-60)/state.height),ox=(w-state.width*scale)/2,oy=(h-state.height*scale)/2;ctx.save();ctx.translate(ox,oy);ctx.scale(scale,scale);ctx.fillStyle='#ffffff08';ctx.beginPath();ctx.ellipse(500,350,460,300,0,0,7);ctx.fill();ctx.strokeStyle='#8e70ff22';ctx.lineWidth=1;for(let x=40;x<1000;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,700);ctx.stroke()}for(let y=30;y<700;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1000,y);ctx.stroke()}ctx.fillStyle='#ff537022';ctx.beginPath();ctx.rect(0,0,1000,700);ctx.arc(500,350,state.radius,0,7,true);ctx.fill('evenodd');ctx.strokeStyle='#ffcf6c';ctx.lineWidth=4;ctx.setLineDash([12,8]);ctx.beginPath();ctx.arc(500,350,state.radius,0,7);ctx.stroke();ctx.setLineDash([]);for(const p of state.players){if(p.hitUntil>Date.now()&&Math.random()<.12)burst(p.x,p.y,p.color,2);drawBlob(p,t,1)}for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=120*dt;p.life-=dt*.75;ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,7);ctx.fill();if(p.life<=0)particles.splice(i,1)}ctx.globalAlpha=1;if(state.phase==='winner'&&state.winner&&Math.random()<.25)burst(Math.random()*1000,Math.random()*170,`hsl(${Math.random()*360},90%,65%)`,4);ctx.restore()}
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>
